@@ -37,7 +37,7 @@ int main() {
 	int nErrorStatus;
 	nErrorStatus = WSAStartup(0x0202, &wsaData);
 	struct sockaddr_in server_addr;
-	while (1) {
+	
 		if ((ssock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
 			Error("Socket");
 
@@ -46,17 +46,17 @@ int main() {
 			Error("Bind");
 		if (listen(ssock, 10) < 0)
 			Error("Listen");
-		if ((csock = accept(ssock, NULL, NULL)) != INVALID_SOCKET) 	cout << "Start Proxy Server\n";
-		else Error("Accept");
-		Request_Msg(csock, TRUE);
-		Request_Msg(recvServer, FALSE);
-	//	thread t1(Request_Msg, csock, TRUE);	//클라이언트 -> 서버
-	//	thread t2(Request_Msg, csock, FALSE);	//서버 -> 클라이언트
-	//	t2.join();
-	//	t1.join();
-
-	}
-	free(getIP); closesocket(ssock); closesocket(csock); WSACleanup();
+		while (1) {
+			if ((csock = accept(ssock, NULL, NULL)) != INVALID_SOCKET) 	cout << "Start Proxy Server\n";
+			else Error("Accept");
+			Request_Msg(csock, TRUE);
+			Request_Msg(recvServer, FALSE);
+			//	thread t1(Request_Msg, csock, TRUE);	//클라이언트 -> 서버
+			//	thread t2(Request_Msg, csock, FALSE);	//서버 -> 클라이언트
+			//	t2.join();
+			//	t1.join();
+		}
+	free(getIP); closesocket(recvServer); closesocket(ssock); closesocket(csock); WSACleanup();
 	return 0;
 }
 
@@ -64,7 +64,7 @@ int main() {
 void Request_Msg(SOCKET csock, bool is_Host) {
 	string ch;
 	SOCKET sock = csock;
-	while (1) {
+
 		if (is_Host == TRUE) {
 			ch = recv_Msg(sock, is_Host);
 			GetHostAddr(ch);
@@ -73,7 +73,7 @@ void Request_Msg(SOCKET csock, bool is_Host) {
 		else {
 			ch = recv_Msg(recvServer, is_Host);
 			Send_Msg(ch, is_Host);
-		}
+
 	}
 }
 string recv_Msg(SOCKET sock, bool is_Host) {
@@ -87,7 +87,10 @@ string recv_Msg(SOCKET sock, bool is_Host) {
 		cout << ch << endl;
 	}
 	else  Error("Request_Msg Recieve");
-	if(is_Host == FALSE) if (ch.find("hacking") != string::npos)		ReplaceAll(ch, "hacking", "ABCDEF");
+	if (is_Host == FALSE) {
+		if (ch.find("hacking") != string::npos)		ReplaceAll(ch, "hacking", "ABCDEF");
+		if (send(csock, ch.c_str(), ch.length(), 0) == SOCKET_ERROR) Error("send ");
+	}
 	mtx.unlock();
 	return ch;
 }
@@ -98,6 +101,7 @@ void GetHostAddr(string Msg) {
 	string hostname = "";
 	if (tmpMsg.find("Host: ") != string::npos) {
 		hostname = tmpMsg.substr(tmpMsg.find("Host: ") + 6, tmpMsg.find("\r") - 1);
+		hostname.erase(hostname.find("\r"), hostname.back());
 		if (hostname.find(':') != string::npos) {
 			port = ntohs(stoi(hostname.substr(hostname.find(':') + 1, hostname.back())));
 			hostname = hostname.substr(0, hostname.find(':'));
@@ -112,7 +116,6 @@ void GetHostAddr(string Msg) {
 			cout << ">> IP : " << getIP << endl;
 		}
 		freeaddrinfo(paddrInfo);
-
 	}
 }
 void Send_Msg(string tmpMsg, bool is_Host) {
@@ -128,11 +131,6 @@ void Send_Msg(string tmpMsg, bool is_Host) {
 		}
 		else Error("Connect");
 	}
-	else {
-			if (send(csock, msg.c_str(), msgLen, 0) == SOCKET_ERROR) Error("send ");
-			else cout << ">> packet send!\n";
-	}
-	closesocket(recvServer);
 }
 void SetAddr(struct sockaddr_in *addr, ADDRESS_FAMILY sin_family, ULONG IP, int port) {
 	ZeroMemory(addr, sizeof(*addr));
